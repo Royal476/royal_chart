@@ -1,45 +1,39 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
-        #tradingview_chart { width: 100%; height: 100%; }
-    </style>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://s.tradingview.com/tv.js"></script>
+<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+<style>body{margin:0; background:#0A0A0A} #tradingview_chart{width:100vw; height:100vh}</style>
 </head>
 <body>
+<div id="tradingview_chart"></div>
 
-    <!-- 1. The Interactive Live Chart Container -->
-    <div id="tradingview_chart"></div>
+<script>
+// YOUR LIVE TRADINGVIEW WIDGET
+var widget = new TradingView.widget({
+  "autosize": true,
+  "symbol": "OANDA:XAUUSD",
+  "interval": "15",
+  "timezone": "Etc/UTC",
+  "theme": "dark",
+  "style": "1",
+  "locale": "en",
+  "enable_publishing": false,
+  "allow_symbol_change": true,
+  "container_id": "tradingview_chart"
+});
 
-    <!-- Load the official TradingView Widget Script -->
-    <script type="text/javascript" src="https://tradingview.com"></script>
-    <script type="text/javascript">
-        var widget = new TradingView.widget({
-            "autosize": true,
-            "symbol": "FX:XAUUSD",
-            "interval": "15",
-            "timezone": "Etc/UTC",
-            "theme": "dark",
-            "style": "1",
-            "locale": "en",
-            "enable_publishing": false,
-            "hide_side_toolbar": false, // Shows the drawing toolbar like the normal app
-            "allow_symbol_change": true,
-            "container_id": "tradingview_chart"
-        });
+// THE SECRET - INTERNAL CAPTURE, NO BLACK SCREEN
+function captureChartForGemini() {
+  return html2canvas(document.getElementById('tradingview_chart')).then(canvas => {
+    return canvas.toDataURL('image/png'); // returns base64
+  });
+}
 
-        // 2. THE SECRET FIX: Generates a raw image from inside the canvas to bypass the black screen
-        function captureChartForGemini() {
-            var canvas = document.querySelector('#tradingview_chart iframe').contentWindow.document.querySelector('canvas');
-            if (canvas) {
-                // Converts the active drawing layer directly to a Base64 Image string
-                return canvas.toDataURL("image/png");
-            } else {
-                // Alternative: Use TradingView's server-side snapshot if iframe canvas is restricted
-                return widget.chart().takeScreenshot(); 
-            }
-        }
-    </script>
+function changeSymbol(newSym){
+  widget.chart().setSymbol(newSym);
+}
+</script>
 </body>
 </html>
