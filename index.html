@@ -15,66 +15,44 @@ body{margin:0;background:#000}
 <script>
 const API_KEY = '4fdf19aaad944ac595534fbd8afca6c3';
 
-let url = new URLSearchParams(location.search);
-let raw = (url.get('symbol')||'XAUUSD').toUpperCase().replace('/','');
-let tf = url.get('tf')||'15m';
+let p = new URLSearchParams(location.search);
+let raw = (p.get('symbol')||'XAUUSD').toUpperCase();
+let tf = p.get('tf')||'15m';
 document.getElementById('sym').innerText = raw+' / '+tf;
 
-let chart = LightweightCharts.createChart(document.getElementById('chart'),{
+const chart = LightweightCharts.createChart(document.getElementById('chart'), {
   layout:{background:{color:'#000'},textColor:'#DDD'},
-  grid:{vertLines:{color:'#222'},horzLines:{color:'#222'}},
+  grid:{vertLines:{color:'#1A1A1A'},horzLines:{color:'#1A1A1A'}},
+  timeScale:{timeVisible:true, rightOffset:5, barSpacing:6},
+  crosshair:{mode:1}
 });
-let series = chart.addCandlestickSeries({upColor:'#00ff88',downColor:'#ff4444',borderVisible:false});
+const candle = chart.addCandlestickSeries({upColor:'#00D2C4',downColor:'#FF4976',borderVisible:false,wickUpColor:'#00D2C4',wickDownColor:'#FF4976'});
 
+let lastData = [];
 async function load(){
   try{
-    if(API_KEY.includes('PASTE_YOUR')){ document.getElementById('price').innerText='PUT YOUR API KEY INSIDE CODE'; return; }
-
-    // Convert EURUSD -> EUR/USD, XAUUSD -> XAU/USD, BTCUSD -> BTC/USD
-    let symbol = raw.slice(0,3)+'/'+raw.slice(3);
-    if(raw.startsWith('XAU')) symbol='XAU/USD';
-    if(raw.startsWith('XAG')) symbol='XAG/USD';
-
+    let sym = raw.slice(0,3)+'/'+raw.slice(3);
+    if(raw.startsWith('XAU')) sym='XAU/USD';
     let tfMap={'1m':'1min','5m':'5min','15m':'15min','30m':'30min','1h':'1h','4h':'4h','1d':'1day'};
     let interval = tfMap[tf]||'15min';
-
-    document.getElementById('price').innerText = 'Fetching '+symbol+' '+interval+'...';
-
-    let apiUrl = `https://api.twelvedata.com/time_series?symbol=${symbol}&interval=${interval}&apikey=${API_KEY}&outputsize=200`;
-    let res = await fetch(apiUrl);
-    let json = await res.json();
-
-    if(json.code==429){ document.getElementById('price').innerText='TwelveData Limit Reached - Wait 1 min'; return; }
-    if(!json.values){ document.getElementById('price').innerText='Error: '+(json.message||'No data'); console.log(json); return; }
-
-    let data = json.values.reverse().map(v=>({
-      time: new Date(v.datetime).getTime()/1000,
-      open: parseFloat(v.open),
-      high: parseFloat(v.high),
-      low: parseFloat(v.low),
-      close: parseFloat(v.close)
-    }));
-
-    series.setData(data);
+    document.getElementById('price').innerText = 'Fetching '+sym+'...';
+    let url = `https://api.twelvedata.com/time_series?symbol=${sym}&interval=${interval}&apikey=${API_KEY}&outputsize=200&format=JSON`;
+    let res = await fetch(url);
+    let j = await res.json();
+    if(!j.values){ document.getElementById('price').innerText = j.message||'Limit - wait 1 min'; return; }
+    lastData = j.values.reverse().map(v=>({time: new Date(v.datetime).getTime()/1000, open:+v.open, high:+v.high, low:+v.low, close:+v.close}));
+    candle.setData(lastData);
     chart.timeScale().fitContent();
-    document.getElementById('price').innerText = data[data.length-1].close.toFixed(2)+' LIVE '+symbol;
-    window.lastData = data;
-
-  }catch(e){
-    document.getElementById('price').innerText = 'Network Error: '+e;
-  }
+    // Scroll to last candles so no flatline gap
+    chart.timeScale().scrollToRealTime();
+    document.getElementById('price').innerText = lastData[lastData.length-1].close.toFixed(2)+' LIVE '+sym;
+  }catch(e){ document.getElementById('price').innerText = 'Error: '+e; }
 }
 load();
 setInterval(load, 15000);
 
-// For Roya Bot SCAN button - OFFICIAL screenshot - NO BLACK SCREEN
-window.getChartScreenshot = async () => {
-  let canvas = await chart.takeScreenshot();
-  return canvas.toDataURL('image/png');
-};
-window.getCandleData = () => {
-  return JSON.stringify({symbol: raw, tf: tf, candles: window.lastData||[]});
-};
+window.getChartScreenshot = async () => { let c = await chart.takeScreenshot(); return c.toDataURL('image/png'); };
+window.getCandleData = () => JSON.stringify({symbol:raw, tf:tf, candles:lastData});
 </script>
 </body>
 </html>
