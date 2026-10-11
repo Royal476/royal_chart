@@ -1,113 +1,80 @@
 <!DOCTYPE html>
-<html><head>
+<html>
+<head>
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 <style>
-body{margin:0;background:#0A0A0A;color:#888;font-family:sans-serif}
-#top{height:26px;background:#111;display:flex;justify-content:space-between;align-items:center;padding:0 10px;font-size:11px}
-#chart{width:100vw;height:calc(100vh - 26px)}
+body{margin:0;background:#000}
+#top{height:32px;background:#111;color:#aaa;display:flex;justify-content:space-between;align-items:center;padding:0 12px;font:12px sans-serif}
+#chart{width:100vw;height:calc(100vh - 32px)}
 </style>
-</head><body>
-<div id="top"><span id="sym">Loading...</span><span id="price"></span></div>
+</head>
+<body>
+<div id="top"><span id="sym">Loading...</span><span id="price">...</span></div>
 <div id="chart"></div>
 <script>
-const TWELVE_KEY = 'YOUR_TWELVEDATA_API_KEY'; 4fdf19aaad944ac595534fbd8afca6c3
+const API_KEY = 'PASTE_YOUR_TWELVEDATA_KEY_HERE'; 4fdf19aaad944ac595534fbd8afca6c3
 
-let q = new URLSearchParams(location.search);
-let rawSymbol = (q.get('symbol')||'XAUUSD').toUpperCase().replace('/','').replace('=','');
-let tf = q.get('tf')||'15m';
-document.getElementById('sym').innerText = rawSymbol+' / '+tf;
+let url = new URLSearchParams(location.search);
+let raw = (url.get('symbol')||'XAUUSD').toUpperCase().replace('/','');
+let tf = url.get('tf')||'15m';
+document.getElementById('sym').innerText = raw+' / '+tf;
 
 let chart = LightweightCharts.createChart(document.getElementById('chart'),{
-  layout:{background:{color:'#0A0A0A'},textColor:'#DDD'},
-  grid:{vertLines:{color:'#1A1A1A'},horzLines:{color:'#1A1A1A'}},
-  timeScale:{timeVisible:true,secondsVisible:false}
+  layout:{background:{color:'#000'},textColor:'#DDD'},
+  grid:{vertLines:{color:'#222'},horzLines:{color:'#222'}},
 });
-let candleSeries = chart.addCandlestickSeries({upColor:'#00D2C4',downColor:'#FF4976',borderVisible:false,wickUpColor:'#00D2C4',wickDownColor:'#FF4976'});
-let currentCandles = [];
-
-// MAPS
-const FOREX_PAIRS = ['EURUSD','GBPUSD','USDJPY','AUDUSD','USDCAD','USDCHF','NZDUSD','EURGBP','EURJPY','GBPJPY','AUDJPY','EURCHF','EURAUD','GBPAUD','AUDNZD','NZDJPY','GBPNZD','EURCAD','EURNZD','AUDCAD'];
-const BINANCE_MAP = {'XAUUSD':'PAXGUSDT','GOLD':'PAXGUSDT','XAUEUR':'PAXGUSDT','BTCUSD':'BTCUSDT','ETHUSD':'ETHUSDT'};
-
-function isForex(sym){ return FOREX_PAIRS.includes(sym) || sym.length===6; }
-
-async function fetchBinance(sym, interval){
-  let r = await fetch(`https://api.binance.com/api/v3/klines?symbol=${sym}&interval=${interval}&limit=200`);
-  if(!r.ok) throw 'binance fail';
-  let d = await r.json();
-  return d.map(k=>({time:k[0]/1000,open:+k[1],high:+k[2],low:+k[3],close:+k[4]}));
-}
-async function fetchTwelve(sym, interval){
-  // Convert XAUUSD -> XAU/USD, EURUSD -> EUR/USD
-  let tdSym = sym.slice(0,3)+'/'+sym.slice(3);
-  if(sym.startsWith('XAU')) tdSym='XAU/USD';
-  let mapTF={'1m':'1min','5m':'5min','15m':'15min','30m':'30min','1h':'1h','4h':'4h','1d':'1day'};
-  let tdTF = mapTF[interval]||'15min';
-  let url = `https://api.twelvedata.com/time_series?symbol=${tdSym}&interval=${tdTF}&apikey=${TWELVE_KEY}&outputsize=200&format=JSON`;
-  let r = await fetch(url);
-  let j = await r.json();
-  if(!j.values) throw 'twelve fail '+JSON.stringify(j);
-  return j.values.reverse().map(v=>({time:new Date(v.datetime).getTime()/1000,open:+v.open,high:+v.high,low:+v.low,close:+v.close}));
-}
+let series = chart.addCandlestickSeries({upColor:'#00ff88',downColor:'#ff4444',borderVisible:false});
 
 async function load(){
   try{
-    let data;
-    if(isForex(rawSymbol)){
-      // FOREX -> TwelveData first
-      data = await fetchTwelve(rawSymbol, tf);
-      document.getElementById('price').innerText = data[data.length-1].close.toFixed(2)+' [TwelveData REAL '+rawSymbol+']';
-    } else {
-      // CRYPTO/GOLD -> Binance first
-      let bSym = BINANCE_MAP[rawSymbol]||rawSymbol;
-      data = await fetchBinance(bSym, tf);
-      document.getElementById('price').innerText = data[data.length-1].close.toFixed(2)+' [Binance '+bSym+']';
-    }
-    currentCandles = data;
-    candleSeries.setData(data);
+    if(API_KEY.includes('PASTE_YOUR')){ document.getElementById('price').innerText='PUT YOUR API KEY INSIDE CODE'; return; }
+
+    // Convert EURUSD -> EUR/USD, XAUUSD -> XAU/USD, BTCUSD -> BTC/USD
+    let symbol = raw.slice(0,3)+'/'+raw.slice(3);
+    if(raw.startsWith('XAU')) symbol='XAU/USD';
+    if(raw.startsWith('XAG')) symbol='XAG/USD';
+
+    let tfMap={'1m':'1min','5m':'5min','15m':'15min','30m':'30min','1h':'1h','4h':'4h','1d':'1day'};
+    let interval = tfMap[tf]||'15min';
+
+    document.getElementById('price').innerText = 'Fetching '+symbol+' '+interval+'...';
+
+    let apiUrl = `https://api.twelvedata.com/time_series?symbol=${symbol}&interval=${interval}&apikey=${API_KEY}&outputsize=200`;
+    let res = await fetch(apiUrl);
+    let json = await res.json();
+
+    if(json.code==429){ document.getElementById('price').innerText='TwelveData Limit Reached - Wait 1 min'; return; }
+    if(!json.values){ document.getElementById('price').innerText='Error: '+(json.message||'No data'); console.log(json); return; }
+
+    let data = json.values.reverse().map(v=>({
+      time: new Date(v.datetime).getTime()/1000,
+      open: parseFloat(v.open),
+      high: parseFloat(v.high),
+      low: parseFloat(v.low),
+      close: parseFloat(v.close)
+    }));
+
+    series.setData(data);
     chart.timeScale().fitContent();
+    document.getElementById('price').innerText = data[data.length-1].close.toFixed(2)+' LIVE '+symbol;
+    window.lastData = data;
+
   }catch(e){
-    console.log('Primary fail, trying fallback', e);
-    try{
-      // Fallback opposite source
-      let data;
-      if(isForex(rawSymbol)){
-        let bSym = BINANCE_MAP[rawSymbol]||'EURUSDT';
-        data = await fetchBinance(bSym, tf);
-      } else {
-        data = await fetchTwelve('XAU/USD', tf);
-      }
-      currentCandles = data;
-      candleSeries.setData(data);
-      chart.timeScale().fitContent();
-    }catch(e2){ document.getElementById('price').innerText='Feed offline - check API key'; }
+    document.getElementById('price').innerText = 'Network Error: '+e;
   }
 }
-load(); setInterval(load, 10000);
+load();
+setInterval(load, 15000);
 
-// --- OFFICIAL APIs Flutter will call ---
+// For Roya Bot SCAN button - OFFICIAL screenshot - NO BLACK SCREEN
 window.getChartScreenshot = async () => {
   let canvas = await chart.takeScreenshot();
   return canvas.toDataURL('image/png');
 };
 window.getCandleData = () => {
-  return JSON.stringify({symbol: rawSymbol, tf: tf, candles: currentCandles.slice(-150)});
+  return JSON.stringify({symbol: raw, tf: tf, candles: window.lastData||[]});
 };
-// For your Multi-TF SCAN: 4H trend, 1H bias, 15M POI, 5M entry
-window.getMultiTFData = async () => {
-  // This will be called by Flutter to get 4 timeframes at once
-  let tfs = ['4h','1h','15m','5m'];
-  let result = {};
-  for(let t of tfs){
-    try{
-      if(isForex(rawSymbol)) result[t] = await fetchTwelve(rawSymbol, t);
-      else {
-        let bSym = BINANCE_MAP[rawSymbol]||rawSymbol;
-        result[t] = await fetchBinance(bSym, t);
-      }
-    }catch(e){ result[t]=[]; }
-  }
-  return JSON.stringify({symbol: rawSymbol, data: result});
-};
-</script></body></html>
+</script>
+</body>
+</html>
