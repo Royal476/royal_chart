@@ -1,1 +1,113 @@
-<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script><style>body{margin:0;background:#0A0A0A}#chart{width:100vw;height:100vh}</style></head><body><div id="chart"></div><script>const chart=LightweightCharts.createChart(document.getElementById('chart'),{layout:{background:{color:'#0A0A0A'},textColor:'#DDD'},grid:{vertLines:{color:'#1A1A1A'},horzLines:{color:'#1A1A1A'}}});const c=chart.addCandlestickSeries({upColor:'#00D2C4',downColor:'#FF4976',borderVisible:false});async function load(){try{let r=await fetch('https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval=15m&limit=150');let d=await r.json();let a=d.map(k=>({time:k[0]/1000,open:+k[1],high:+k[2],low:+k[3],close:+k[4]}));c.setData(a);chart.timeScale().fitContent();}catch(e){}}load();setInterval(load,5000);</script></body></html>
+<!DOCTYPE html>
+<html><head>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+body{margin:0;background:#0A0A0A;color:#888;font-family:sans-serif}
+#top{height:26px;background:#111;display:flex;justify-content:space-between;align-items:center;padding:0 10px;font-size:11px}
+#chart{width:100vw;height:calc(100vh - 26px)}
+</style>
+</head><body>
+<div id="top"><span id="sym">Loading...</span><span id="price"></span></div>
+<div id="chart"></div>
+<script>
+const TWELVE_KEY = 'YOUR_TWELVEDATA_API_KEY'; 4fdf19aaad944ac595534fbd8afca6c3
+
+let q = new URLSearchParams(location.search);
+let rawSymbol = (q.get('symbol')||'XAUUSD').toUpperCase().replace('/','').replace('=','');
+let tf = q.get('tf')||'15m';
+document.getElementById('sym').innerText = rawSymbol+' / '+tf;
+
+let chart = LightweightCharts.createChart(document.getElementById('chart'),{
+  layout:{background:{color:'#0A0A0A'},textColor:'#DDD'},
+  grid:{vertLines:{color:'#1A1A1A'},horzLines:{color:'#1A1A1A'}},
+  timeScale:{timeVisible:true,secondsVisible:false}
+});
+let candleSeries = chart.addCandlestickSeries({upColor:'#00D2C4',downColor:'#FF4976',borderVisible:false,wickUpColor:'#00D2C4',wickDownColor:'#FF4976'});
+let currentCandles = [];
+
+// MAPS
+const FOREX_PAIRS = ['EURUSD','GBPUSD','USDJPY','AUDUSD','USDCAD','USDCHF','NZDUSD','EURGBP','EURJPY','GBPJPY','AUDJPY','EURCHF','EURAUD','GBPAUD','AUDNZD','NZDJPY','GBPNZD','EURCAD','EURNZD','AUDCAD'];
+const BINANCE_MAP = {'XAUUSD':'PAXGUSDT','GOLD':'PAXGUSDT','XAUEUR':'PAXGUSDT','BTCUSD':'BTCUSDT','ETHUSD':'ETHUSDT'};
+
+function isForex(sym){ return FOREX_PAIRS.includes(sym) || sym.length===6; }
+
+async function fetchBinance(sym, interval){
+  let r = await fetch(`https://api.binance.com/api/v3/klines?symbol=${sym}&interval=${interval}&limit=200`);
+  if(!r.ok) throw 'binance fail';
+  let d = await r.json();
+  return d.map(k=>({time:k[0]/1000,open:+k[1],high:+k[2],low:+k[3],close:+k[4]}));
+}
+async function fetchTwelve(sym, interval){
+  // Convert XAUUSD -> XAU/USD, EURUSD -> EUR/USD
+  let tdSym = sym.slice(0,3)+'/'+sym.slice(3);
+  if(sym.startsWith('XAU')) tdSym='XAU/USD';
+  let mapTF={'1m':'1min','5m':'5min','15m':'15min','30m':'30min','1h':'1h','4h':'4h','1d':'1day'};
+  let tdTF = mapTF[interval]||'15min';
+  let url = `https://api.twelvedata.com/time_series?symbol=${tdSym}&interval=${tdTF}&apikey=${TWELVE_KEY}&outputsize=200&format=JSON`;
+  let r = await fetch(url);
+  let j = await r.json();
+  if(!j.values) throw 'twelve fail '+JSON.stringify(j);
+  return j.values.reverse().map(v=>({time:new Date(v.datetime).getTime()/1000,open:+v.open,high:+v.high,low:+v.low,close:+v.close}));
+}
+
+async function load(){
+  try{
+    let data;
+    if(isForex(rawSymbol)){
+      // FOREX -> TwelveData first
+      data = await fetchTwelve(rawSymbol, tf);
+      document.getElementById('price').innerText = data[data.length-1].close.toFixed(2)+' [TwelveData REAL '+rawSymbol+']';
+    } else {
+      // CRYPTO/GOLD -> Binance first
+      let bSym = BINANCE_MAP[rawSymbol]||rawSymbol;
+      data = await fetchBinance(bSym, tf);
+      document.getElementById('price').innerText = data[data.length-1].close.toFixed(2)+' [Binance '+bSym+']';
+    }
+    currentCandles = data;
+    candleSeries.setData(data);
+    chart.timeScale().fitContent();
+  }catch(e){
+    console.log('Primary fail, trying fallback', e);
+    try{
+      // Fallback opposite source
+      let data;
+      if(isForex(rawSymbol)){
+        let bSym = BINANCE_MAP[rawSymbol]||'EURUSDT';
+        data = await fetchBinance(bSym, tf);
+      } else {
+        data = await fetchTwelve('XAU/USD', tf);
+      }
+      currentCandles = data;
+      candleSeries.setData(data);
+      chart.timeScale().fitContent();
+    }catch(e2){ document.getElementById('price').innerText='Feed offline - check API key'; }
+  }
+}
+load(); setInterval(load, 10000);
+
+// --- OFFICIAL APIs Flutter will call ---
+window.getChartScreenshot = async () => {
+  let canvas = await chart.takeScreenshot();
+  return canvas.toDataURL('image/png');
+};
+window.getCandleData = () => {
+  return JSON.stringify({symbol: rawSymbol, tf: tf, candles: currentCandles.slice(-150)});
+};
+// For your Multi-TF SCAN: 4H trend, 1H bias, 15M POI, 5M entry
+window.getMultiTFData = async () => {
+  // This will be called by Flutter to get 4 timeframes at once
+  let tfs = ['4h','1h','15m','5m'];
+  let result = {};
+  for(let t of tfs){
+    try{
+      if(isForex(rawSymbol)) result[t] = await fetchTwelve(rawSymbol, t);
+      else {
+        let bSym = BINANCE_MAP[rawSymbol]||rawSymbol;
+        result[t] = await fetchBinance(bSym, t);
+      }
+    }catch(e){ result[t]=[]; }
+  }
+  return JSON.stringify({symbol: rawSymbol, data: result});
+};
+</script></body></html>
