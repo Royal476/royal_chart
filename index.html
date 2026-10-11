@@ -5,54 +5,85 @@
 <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 <style>
 body{margin:0;background:#000}
-#top{height:32px;background:#111;color:#aaa;display:flex;justify-content:space-between;align-items:center;padding:0 12px;font:12px sans-serif}
+#top{height:32px;background:#111;color:#aaa;display:flex;justify-content:space-between;align-items:center;padding:0 10px;font:12px Arial}
 #chart{width:100vw;height:calc(100vh - 32px)}
 </style>
 </head>
 <body>
-<div id="top"><span id="sym">Loading...</span><span id="price">...</span></div>
+<div id="top"><span id="sym">XAUUSD / 15m</span><span id="price">Loading...</span></div>
 <div id="chart"></div>
 <script>
-const API_KEY = '4fdf19aaad944ac595534fbd8afca6c3';
+const API_KEY = '4fdf19aaad944ac595534fbd8afca6c3'; 
 
-let p = new URLSearchParams(location.search);
-let raw = (p.get('symbol')||'XAUUSD').toUpperCase();
-let tf = p.get('tf')||'15m';
+let params = new URLSearchParams(location.search);
+let raw = (params.get('symbol')||'XAUUSD').toUpperCase();
+let tf = params.get('tf')||'15m';
 document.getElementById('sym').innerText = raw+' / '+tf;
 
 const chart = LightweightCharts.createChart(document.getElementById('chart'), {
-  layout:{background:{color:'#000'},textColor:'#DDD'},
+  layout:{background:{color:'#0A0A0A'},textColor:'#DDD'},
   grid:{vertLines:{color:'#1A1A1A'},horzLines:{color:'#1A1A1A'}},
-  timeScale:{timeVisible:true, rightOffset:5, barSpacing:6},
-  crosshair:{mode:1}
+  timeScale:{
+    timeVisible:true,
+    secondsVisible:false,
+    rightOffset: 2, // small offset so chart FULL to right
+    barSpacing: 8, // make candles big like TradingView
+    minBarSpacing: 4
+  },
+  rightPriceScale:{autoScale:true, scaleMargins:{top:0.1,bottom:0.1}},
+  crosshair:{mode:0}
 });
-const candle = chart.addCandlestickSeries({upColor:'#00D2C4',downColor:'#FF4976',borderVisible:false,wickUpColor:'#00D2C4',wickDownColor:'#FF4976'});
+
+const candle = chart.addCandlestickSeries({
+  upColor:'#00D2C4',downColor:'#FF4976',
+  borderVisible:false,
+  wickUpColor:'#00D2C4',wickDownColor:'#FF4976'
+});
 
 let lastData = [];
+
 async function load(){
   try{
     let sym = raw.slice(0,3)+'/'+raw.slice(3);
     if(raw.startsWith('XAU')) sym='XAU/USD';
-    let tfMap={'1m':'1min','5m':'5min','15m':'15min','30m':'30min','1h':'1h','4h':'4h','1d':'1day'};
-    let interval = tfMap[tf]||'15min';
-    document.getElementById('price').innerText = 'Fetching '+sym+'...';
-    let url = `https://api.twelvedata.com/time_series?symbol=${sym}&interval=${interval}&apikey=${API_KEY}&outputsize=200&format=JSON`;
+    if(raw.startsWith('XAG')) sym='XAG/USD';
+    let map={'1m':'1min','5m':'5min','15m':'15min','30m':'30min','1h':'1h','4h':'4h','1d':'1day'};
+    let interval = map[tf]||'15min';
+    document.getElementById('price').innerText = 'Loading '+sym+' '+interval+'...';
+
+    let url = `https://api.twelvedata.com/time_series?symbol=${sym}&interval=${interval}&apikey=${API_KEY}&outputsize=150&format=JSON`;
     let res = await fetch(url);
     let j = await res.json();
-    if(!j.values){ document.getElementById('price').innerText = j.message||'Limit - wait 1 min'; return; }
-    lastData = j.values.reverse().map(v=>({time: new Date(v.datetime).getTime()/1000, open:+v.open, high:+v.high, low:+v.low, close:+v.close}));
+
+    if(j.code===429){ document.getElementById('price').innerText='Limit hit - wait 60s'; return; }
+    if(!j.values){ document.getElementById('price').innerText=j.message||'No data'; console.log(j); return; }
+
+    lastData = j.values.reverse().map(v=>({
+      time: new Date(v.datetime).getTime()/1000,
+      open:+v.open, high:+v.high, low:+v.low, close:+v.close
+    }));
+
     candle.setData(lastData);
-    chart.timeScale().fitContent();
-    // Scroll to last candles so no flatline gap
-    chart.timeScale().scrollToRealTime();
-    document.getElementById('price').innerText = lastData[lastData.length-1].close.toFixed(2)+' LIVE '+sym;
-  }catch(e){ document.getElementById('price').innerText = 'Error: '+e; }
+
+    // THIS MAKES CHART FULL - Show last 80 candles big
+    let from = lastData.length - 80;
+    if(from < 0) from = 0;
+    chart.timeScale().setVisibleLogicalRange({from: from, to: lastData.length - 1});
+
+    document.getElementById('price').innerText = lastData[lastData.length-1].close.toFixed(2)+' LIVE';
+  }catch(e){
+    document.getElementById('price').innerText = 'Network error';
+  }
 }
 load();
-setInterval(load, 15000);
+setInterval(load, 20000);
 
-window.getChartScreenshot = async () => { let c = await chart.takeScreenshot(); return c.toDataURL('image/png'); };
+window.getChartScreenshot = async () => {
+  let canvas = await chart.takeScreenshot();
+  return canvas.toDataURL('image/png');
+};
 window.getCandleData = () => JSON.stringify({symbol:raw, tf:tf, candles:lastData});
 </script>
 </body>
 </html>
+
